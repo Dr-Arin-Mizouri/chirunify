@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>chirunify — prepare a lab script for Chirun</title>
+<style>
+  :root {
+    --accent: #68246d;           /* Durham palatinate */
+    --accent-strong: #4e1b52;
+    --on-accent: #ffffff;
+    --bg: #faf9fb;               /* violet-biased paper */
+    --card: #ffffff;
+    --text: #232227;
+    --muted: #625c6a;
+    --border: #ded9e2;
+    --ok: #1a6b3c;
+    --error: #a4243b;
+    --warn: #8a5a00;
+    --focus: #1f6feb;
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --accent: #c99bd1;
+      --accent-strong: #dbb6e1;
+      --on-accent: #231026;
+      --bg: #171419;
+      --card: #211d24;
+      --text: #ece9ef;
+      --muted: #a79fb0;
+      --border: #3a3442;
+      --ok: #57c986;
+      --error: #ff8fa0;
+      --warn: #e8b34b;
+      --focus: #6cb2ff;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  main { max-width: 42rem; margin: 0 auto; padding: 3rem 1.25rem 4rem; }
+
+  .eyebrow {
+    font-size: .74rem; font-weight: 700; letter-spacing: .11em;
+    text-transform: uppercase; color: var(--muted); margin: 0 0 .3rem;
+  }
+  header { margin-bottom: 2.25rem; }
+  header h1 {
+    font-size: 2.3rem; line-height: 1.1; margin: 0 0 .4rem;
+    color: var(--accent); letter-spacing: -.02em; text-wrap: balance;
+  }
+  header p.tagline { margin: 0; color: var(--muted); max-width: 34rem; }
+
+  .card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 10px; padding: 1.5rem 1.6rem; margin-bottom: 1.25rem;
+  }
+  .card h2 { font-size: 1.25rem; margin: 0 0 1.1rem; letter-spacing: -.01em; }
+  .card h2 .okmark { color: var(--ok); }
+
+  svg.icon {
+    width: 1.05em; height: 1.05em; vertical-align: -.16em;
+    stroke: currentColor; stroke-width: 1.8; fill: none;
+    stroke-linecap: round; stroke-linejoin: round; flex: none;
+  }
+
+  /* Drop zone */
+  .dropzone {
+    display: block; border: 1.5px dashed var(--border); border-radius: 8px;
+    padding: 1.75rem 1.5rem; cursor: pointer; position: relative;
+    transition: border-color .15s, background-color .15s;
+  }
+  .dropzone:hover, .dropzone.dragover { border-color: var(--accent); }
+  .dropzone.dragover { background: color-mix(in srgb, var(--accent) 7%, transparent); }
+  .dropzone:focus-within { outline: 3px solid var(--focus); outline-offset: 2px; }
+  .dropzone strong {
+    display: flex; align-items: center; gap: .55rem;
+    font-size: 1.02rem; margin-bottom: .2rem; color: var(--accent);
+  }
+  .dropzone span { color: var(--muted); font-size: .92rem; }
+  .dropzone input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+
+  .filelist { margin: 1rem 0 0; padding: 0; list-style: none; font-size: .93rem; }
+  .filelist li {
+    display: flex; align-items: baseline; gap: .55rem; padding: .3rem 0;
+  }
+  .filelist li + li { border-top: 1px solid var(--border); }
+  .filelist .name { font-family: var(--mono); font-size: .88rem; overflow-wrap: anywhere; }
+  .filelist .tag {
+    flex: none; font-size: .68rem; font-weight: 700; letter-spacing: .08em;
+    color: var(--muted); border: 1px solid var(--border); border-radius: 5px;
+    padding: .05rem .4rem; text-transform: uppercase;
+  }
+  .filelist .problem { color: var(--error); font-weight: 600; }
+
+  label[for="mainpick"] { display: block; margin-top: 1.1rem; font-weight: 600; }
+  select {
+    margin-top: .35rem; padding: .45rem .6rem; font: inherit; width: 100%;
+    border: 1px solid var(--border); border-radius: 8px;
+    background: var(--card); color: var(--text);
+  }
+
+  .runrow { display: flex; align-items: center; gap: 1rem; margin-top: 1.4rem; }
+  button.primary {
+    font: inherit; font-weight: 650; font-size: 1.05rem; color: var(--on-accent);
+    background: var(--accent); border: none; border-radius: 8px;
+    padding: .7rem 2.2rem; cursor: pointer;
+  }
+  button.primary:hover:not(:disabled) { background: var(--accent-strong); }
+  button.primary:disabled { opacity: .45; cursor: not-allowed; }
+  button:focus-visible, a:focus-visible, .dropzone input:focus-visible {
+    outline: 3px solid var(--focus); outline-offset: 2px;
+  }
+
+  #status { color: var(--muted); font-size: .95rem; margin: 0; }
+  #status.error { color: var(--error); font-weight: 600; }
+  .spinner {
+    display: inline-block; width: .85em; height: .85em; vertical-align: -.08em;
+    border: 2px solid currentColor; border-right-color: transparent;
+    border-radius: 50%; animation: spin .7s linear infinite; margin-right: .35rem;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) {
+    .spinner { animation: none; opacity: .5; }
+  }
+
+  /* Results */
+  .downloads { display: flex; gap: .75rem; flex-wrap: wrap; margin-bottom: .5rem; }
+  a.download {
+    display: inline-flex; align-items: center; gap: .5rem; text-decoration: none;
+    font-weight: 600; font-size: .97rem; color: var(--accent);
+    border: 1.5px solid var(--accent); border-radius: 8px; padding: .55rem 1rem;
+  }
+  a.download:hover { color: var(--on-accent); background: var(--accent); }
+  a.download .fname { font-family: var(--mono); font-size: .88rem; font-weight: 600; }
+  .hint { color: var(--muted); font-size: .9rem; margin: .4rem 0 0; }
+  .hint code { font-family: var(--mono); font-size: .85em; }
+
+  #results h3 { font-size: 1rem; margin: 1.6rem 0 .4rem; }
+  ul.issues { margin: 0; padding: 0; list-style: none; }
+  ul.issues li {
+    display: flex; gap: .6rem; align-items: baseline;
+    padding: .5rem 0; border-top: 1px solid var(--border); font-size: .94rem;
+  }
+  .sev {
+    flex: none; font-family: var(--mono); font-size: .68rem; font-weight: 700;
+    letter-spacing: .06em; border-radius: 5px; padding: .12rem .45rem;
+    text-transform: uppercase; border: 1px solid currentColor;
+  }
+  .sev.ERROR { color: var(--error); }
+  .sev.WARN, .sev.TODO { color: var(--warn); }
+  .issues .msg code, .issues .msg .file { font-family: var(--mono); font-size: .86em; }
+  .loc { color: var(--muted); white-space: nowrap; }
+  .allclear { color: var(--ok); font-weight: 600; }
+
+  footer {
+    color: var(--muted); font-size: .88rem; margin-top: 2.5rem;
+    border-top: 1px solid var(--border); padding-top: 1.25rem;
+  }
+  footer p { margin: .15rem 0; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <p class="eyebrow">Durham University Physics · Accessibility for Labs</p>
+    <h1>chirunify</h1>
+    <p class="tagline">Prepare a lab script for Chirun: convert the Overleaf LaTeX and
+    pack it with its images, ready to build as accessible HTML.</p>
+  </header>
+
+  <section class="card" aria-labelledby="step1">
+    <p class="eyebrow">Step 1 · Script folder</p>
+    <h2 id="step1">Choose your script folder</h2>
+    <label class="dropzone" id="dropzone">
+      <strong><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+        Drop your folder here, or click to browse</strong>
+      <span>the Overleaf <code>.tex</code> file together with its images</span>
+      <input type="file" id="filepick" webkitdirectory multiple>
+    </label>
+    <ul class="filelist" id="filelist" aria-live="polite"></ul>
+    <div id="mainpickwrap" hidden>
+      <label for="mainpick">Several .tex files found — which is the source?</label>
+      <select id="mainpick"></select>
+    </div>
+    <div class="runrow">
+      <button class="primary" id="run" disabled>Chirunify</button>
+      <p id="status" role="status" aria-live="polite">Loading the converter…</p>
+    </div>
+  </section>
+
+  <section class="card" id="results" hidden aria-labelledby="doneheading">
+    <p class="eyebrow">Step 2 · Your package</p>
+    <h2 id="doneheading" tabindex="-1"><span class="okmark"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></span>
+      Done — ready to upload to Chirun</h2>
+    <div class="downloads">
+      <a class="download" id="dlzip" download>
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 19h16"/></svg>
+        <span class="fname" id="dlzipname">package.zip</span></a>
+      <a class="download" id="dlconfig" download="config.yml">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 19h16"/></svg>
+        <span class="fname">config.yml</span></a>
+    </div>
+    <p class="hint" id="zipsummary"></p>
+    <p class="hint">Upload the zip to Chirun as one file; keep <code>config.yml</code>
+      beside it for the build settings.</p>
+    <h3 id="lookheading">Things to look at</h3>
+    <p class="allclear" id="allclear" hidden>Nothing found — looks ready to build in Chirun.</p>
+    <ul class="issues" id="issues" aria-labelledby="lookheading"></ul>
+  </section>
+
+  <footer>
+    <p>Everything runs in your browser — your files never leave this computer.</p>
+    <p>Converting Durham University Physics lab scripts into accessible course
+       materials with <a href="https://chirun.org.uk" style="color:var(--accent)">Chirun</a>.</p>
+  </footer>
+</main>
+
+<script src="https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js"></script>
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const IMAGE_EXTS = [".svg", ".png", ".jpg", ".jpeg", ".gif", ".pdf", ".eps"];
+const JUNK = name => name.startsWith(".") || name.endsWith(".tmp") || name === "Thumbs.db";
+const REDUCED = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+let pyodide = null, pyReady = false, files = [];
+
+const PY_SETUP = `
+import io, json, shutil, zipfile
+from pathlib import Path
+import yaml, click
+from chirunify.cli import (_resolve_source_tex, _collect_images,
+                           _missing_references, _tex_files_in)
+from chirunify.models import PrepRequest
+from chirunify.pipeline import run_pipeline
+
+INPUT = Path('/job/input')
+ZIP_BYTES = b''
+
+def reset_input():
+    if INPUT.exists():
+        shutil.rmtree(INPUT)
+    INPUT.mkdir(parents=True)
+
+def run_job(main_name=None):
+    global ZIP_BYTES
+    try:
+        src = _resolve_source_tex(INPUT, main_name)
+        result = run_pipeline(PrepRequest(input_path=src))
+    except click.ClickException as e:
+        return json.dumps({"error": e.message,
+                           "tex_candidates": [p.name for p in _tex_files_in(INPUT)]})
+    images = _collect_images(INPUT, Path('/job/out'))
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr(result.tex_filename, result.tex)
+        for name, p in sorted(images.items()):
+            zf.write(p, arcname=name)
+    ZIP_BYTES = buf.getvalue()
+    return json.dumps({
+        "slug": result.slug, "title": result.title,
+        "tex_filename": result.tex_filename, "source_name": src.name,
+        "config": yaml.safe_dump(result.config, sort_keys=False, allow_unicode=True),
+        "image_count": len(images),
+        "missing": _missing_references(result, images),
+        "issues": [{"severity": i.severity.name, "code": i.code,
+                    "message": i.message, "location": i.location}
+                   for i in result.issues],
+    })
+`;
+
+function setStatus(text, { error = false, busy = false } = {}) {
+  const el = $("status");
+  el.classList.toggle("error", error);
+  el.innerHTML = "";
+  if (busy) {
+    const s = document.createElement("span");
+    s.className = "spinner"; s.setAttribute("aria-hidden", "true");
+    el.appendChild(s);
+  }
+  el.appendChild(document.createTextNode(text));
+}
+
+async function init() {
+  try {
+    setStatus("Loading the converter — about 10 MB, first visit only…", { busy: true });
+    pyodide = await loadPyodide();
+    await pyodide.loadPackage(["micropip"]);
+    const micropip = pyodide.pyimport("micropip");
+    await micropip.install("chirunify-0.1.0-py3-none-any.whl");
+    pyodide.runPython(PY_SETUP);
+    pyReady = true;
+    setStatus(files.length ? "Ready to convert." : "Ready — choose a folder to begin.");
+    updateRunButton();
+  } catch (err) {
+    setStatus("Could not load the converter — check your connection and reload the page.",
+              { error: true });
+    console.error(err);
+  }
+}
+
+function updateRunButton() { $("run").disabled = !(pyReady && files.length); }
+
+function fileRow(tag, nameHtmlText, problem = false) {
+  const li = document.createElement("li");
+  const t = document.createElement("span");
+  t.className = "tag"; t.textContent = tag;
+  const n = document.createElement("span");
+  n.className = "name" + (problem ? " problem" : "");
+  n.textContent = nameHtmlText;
+  li.append(t, n);
+  return li;
+}
+
+function describeFiles() {
+  const texes = files.filter(f => /\.(tex|latex)$/i.test(f.name));
+  const images = files.filter(f => IMAGE_EXTS.some(e => f.name.toLowerCase().endsWith(e)));
+  const list = $("filelist");
+  list.innerHTML = "";
+  if (!files.length) return;
+  for (const t of texes) list.appendChild(fileRow("tex", t.name));
+  if (images.length) {
+    const label = images.length === 1 ? "image" : `${images.length} images`;
+    list.appendChild(fileRow(label, images.map(f => f.name).join("  ")));
+  } else {
+    list.appendChild(fileRow("note", "No images found in the folder."));
+  }
+  if (!texes.length) {
+    const li = fileRow("missing", "No .tex file found — add your LaTeX file to the folder.", true);
+    list.appendChild(li);
+  }
+}
+
+function setFiles(fileArray) {
+  files = fileArray.filter(f => !JUNK(f.name));
+  $("mainpickwrap").hidden = true;
+  $("results").hidden = true;
+  describeFiles();
+  updateRunButton();
+  if (pyReady) setStatus(files.length ? "Ready to convert." : "Ready — choose a folder to begin.");
+}
+
+$("filepick").addEventListener("change", e => setFiles([...e.target.files]));
+
+const zone = $("dropzone");
+zone.addEventListener("dragover", e => { e.preventDefault(); zone.classList.add("dragover"); });
+zone.addEventListener("dragleave", () => zone.classList.remove("dragover"));
+zone.addEventListener("drop", async e => {
+  e.preventDefault(); zone.classList.remove("dragover");
+  const dropped = [];
+  const walk = async entry => {
+    if (entry.isFile) {
+      dropped.push(await new Promise((res, rej) => entry.file(res, rej)));
+    } else if (entry.isDirectory) {
+      const reader = entry.createReader();
+      let batch;
+      do {
+        batch = await new Promise((res, rej) => reader.readEntries(res, rej));
+        for (const child of batch) await walk(child);
+      } while (batch.length);
+    }
+  };
+  for (const item of e.dataTransfer.items) {
+    const entry = item.webkitGetAsEntry && item.webkitGetAsEntry();
+    if (entry) await walk(entry);
+  }
+  setFiles(dropped.length ? dropped : [...e.dataTransfer.files]);
+});
+
+$("run").addEventListener("click", async () => {
+  $("run").disabled = true;
+  $("results").hidden = true;
+  setStatus("Converting…", { busy: true });
+  try {
+    pyodide.runPython("reset_input()");
+    for (const f of files) {
+      const bytes = new Uint8Array(await f.arrayBuffer());
+      pyodide.FS.writeFile("/job/input/" + f.name, bytes);
+    }
+    const mainName = $("mainpickwrap").hidden ? null : $("mainpick").value;
+    pyodide.globals.set("MAIN_NAME", mainName);
+    const out = JSON.parse(pyodide.runPython("run_job(MAIN_NAME)"));
+    if (out.error) return showAmbiguity(out);
+    showResults(out);
+    setStatus("");
+  } catch (err) {
+    setStatus("Something went wrong during conversion — " + err.message, { error: true });
+    console.error(err);
+  } finally {
+    updateRunButton();
+  }
+});
+
+function showAmbiguity(out) {
+  if (out.tex_candidates && out.tex_candidates.length > 1) {
+    const pick = $("mainpick");
+    pick.innerHTML = "";
+    for (const name of out.tex_candidates) {
+      const opt = document.createElement("option");
+      opt.value = name; opt.textContent = name;
+      pick.appendChild(opt);
+    }
+    $("mainpickwrap").hidden = false;
+    setStatus("Choose the source .tex above, then select Chirunify again.");
+    pick.focus();
+  } else {
+    setStatus(out.error, { error: true });
+  }
+}
+
+function showResults(out) {
+  const zipBytes = pyodide.globals.get("ZIP_BYTES").toJs();
+  const zipUrl = URL.createObjectURL(new Blob([zipBytes], { type: "application/zip" }));
+  const cfgUrl = URL.createObjectURL(new Blob([out.config], { type: "text/yaml" }));
+  $("dlzip").href = zipUrl;
+  $("dlzip").download = out.slug + ".zip";
+  $("dlzipname").textContent = out.slug + ".zip";
+  $("dlconfig").href = cfgUrl;
+  $("zipsummary").textContent =
+    `The zip holds ${out.tex_filename} plus ${out.image_count} ` +
+    `image${out.image_count === 1 ? "" : "s"}, exactly as supplied.`;
+
+  const list = $("issues");
+  list.innerHTML = "";
+  const items = [...out.issues];
+  if (out.missing.length) {
+    items.push({ severity: "TODO", code: "IMAGE-NOT-IN-FOLDER",
+      message: `Referenced in the .tex but not in your folder: ${out.missing.join(", ")}`,
+      location: null });
+  }
+  $("allclear").hidden = items.length > 0;
+  for (const i of items) {
+    const li = document.createElement("li");
+    const sev = document.createElement("span");
+    sev.className = "sev " + i.severity;
+    sev.textContent = i.severity === "ERROR" ? "error" : "check";
+    const msg = document.createElement("span");
+    msg.className = "msg";
+    msg.textContent = i.message + " ";
+    if (i.location) {
+      const loc = document.createElement("span");
+      loc.className = "loc"; loc.textContent = `(${i.location})`;
+      msg.appendChild(loc);
+    }
+    li.append(sev, msg);
+    list.appendChild(li);
+  }
+  $("results").hidden = false;
+  $("results").scrollIntoView({ behavior: REDUCED ? "auto" : "smooth", block: "start" });
+  $("doneheading").focus({ preventScroll: true });
+}
+
+init();
+</script>
+</body>
+</html>
