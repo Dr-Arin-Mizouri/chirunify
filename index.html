@@ -265,7 +265,8 @@ def run_job(main_name=None):
         for name, p in sorted(images.items()):
             zf.write(p, arcname=name)
         # static/custom.css rides inside the zip (Chirun extracts it and config.yml's
-        # `css:` line links it), so the CSS can't be left out of the upload.
+        # css: line links it), so the CSS can't be left out of the upload.
+        # NB: this Python lives in a JS template literal -- never use backticks here.
         for arcname, content in result.static_files.items():
             zf.writestr(arcname, content)
     ZIP_BYTES = buf.getvalue()
