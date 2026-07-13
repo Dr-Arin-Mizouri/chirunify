@@ -207,7 +207,10 @@
     </div>
     <p class="hint" id="zipsummary"></p>
     <p class="hint">Upload the zip to Chirun as one file; keep <code>config.yml</code>
-      beside it for the build settings.</p>
+      beside it for the build settings. The zip already contains
+      <code>static/custom.css</code> (linked by <code>config.yml</code>'s <code>css:</code>
+      line) to switch off the theme's heading underline — nothing extra to upload. Upload
+      the zip as-is; don't re-compress it in Finder.</p>
     <h3 id="lookheading">Things to look at</h3>
     <p class="allclear" id="allclear" hidden>Nothing found — looks ready to build in Chirun.</p>
     <ul class="issues" id="issues" aria-labelledby="lookheading"></ul>
@@ -261,6 +264,10 @@ def run_job(main_name=None):
         zf.writestr(result.tex_filename, result.tex)
         for name, p in sorted(images.items()):
             zf.write(p, arcname=name)
+        # static/custom.css rides inside the zip (Chirun extracts it and config.yml's
+        # `css:` line links it), so the CSS can't be left out of the upload.
+        for arcname, content in result.static_files.items():
+            zf.writestr(arcname, content)
     ZIP_BYTES = buf.getvalue()
     return json.dumps({
         "slug": result.slug, "title": result.title,
@@ -423,7 +430,7 @@ function showResults(out) {
   $("dlconfig").href = cfgUrl;
   $("zipsummary").textContent =
     `The zip holds ${out.tex_filename} plus ${out.image_count} ` +
-    `image${out.image_count === 1 ? "" : "s"}, exactly as supplied.`;
+    `image${out.image_count === 1 ? "" : "s"} (as supplied), and static/custom.css.`;
 
   const list = $("issues");
   list.innerHTML = "";
