@@ -254,6 +254,9 @@ def run_job(main_name=None):
     global ZIP_BYTES
     try:
         src = _resolve_source_tex(INPUT, main_name)
+        # run_pipeline derives available_images from the .tex's own folder, so raster figures
+        # are routed to their _SVG.svg redraws here exactly as in the CLI -- one shared place,
+        # nothing for this UI to pass (or forget).
         result = run_pipeline(PrepRequest(input_path=src))
     except click.ClickException as e:
         return json.dumps({"error": e.message,
